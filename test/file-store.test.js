@@ -5,7 +5,6 @@ import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
 import http from 'node:http';
-import { setTimeout } from 'node:timers/promises';
 import { once } from 'node:events';
 import { FileTaskStore } from '../src/file-store.js';
 import { startServer } from './helpers.js';
@@ -132,24 +131,28 @@ test('SIGTERM lets an in-flight write finish before exiting', async () => {
     const [line] = await once(child.stdout, 'data');
     const port = Number(String(line).match(/:(\d+) /)[1]);
 
-    // Send the headers and half the body, signal the server, then finish the
-    // body, so the request is still in flight when SIGTERM arrives.
+    // Send only the headers and wait for the server's 100 Continue, which
+    // proves it has accepted the request; then signal it and send the body,
+    // so the request and its write are in flight during shutdown.
     const body = JSON.stringify({ title: 'In flight at shutdown' });
     const req = http.request({
       host: '127.0.0.1',
       port,
       method: 'POST',
       path: '/tasks',
-      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
+      headers: {
+        'Content-Type': 'application/json',
+        'Content-Length': Buffer.byteLength(body),
+        Expect: '100-continue',
+      },
     });
     const response = once(req, 'response');
-    req.write(body.slice(0, 10));
-    await once(req, 'socket').then(([socket]) => once(socket, 'connect'));
-    await setTimeout(200); // let the server accept the connection
+    req.flushHeaders();
+    await once(req, 'continue');
 
     child.kill('SIGTERM');
     await once(child.stdout, 'data'); // "SIGTERM received, shutting down"
-    req.end(body.slice(10));
+    req.end(body);
 
     const [res] = await response;
     assert.equal(res.statusCode, 201);

@@ -15,13 +15,12 @@ server.listen(PORT, () => {
 });
 
 // On shutdown, stop accepting connections and let in-flight requests finish.
-// Mutating requests only respond once their write is on disk; the flush is a
-// safeguard for any write still queued after the last response.
+// Mutating requests only respond once their write is on disk, so no write is
+// left pending once the server has closed.
 async function shutdown(signal) {
   console.log(`${signal} received, shutting down`);
   setTimeout(() => process.exit(1), 10_000).unref();
   await new Promise((resolve) => server.close(resolve));
-  await store.flush?.();
   process.exit(0);
 }
 
