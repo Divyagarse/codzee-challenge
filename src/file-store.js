@@ -11,8 +11,7 @@ export class FileTaskStore extends TaskStore {
   constructor(filePath) {
     super();
     this.filePath = filePath;
-    // Writes are chained so only one write is in flight at a time and the
-    // last write always reflects the latest in-memory state.
+    // Mutations and their writes are chained so only one runs at a time.
     this.writeQueue = Promise.resolve();
   }
 
@@ -34,13 +33,27 @@ export class FileTaskStore extends TaskStore {
   }
 
   /**
-   * Queues a write of the current state. The returned promise rejects if
-   * that write fails; the queue itself keeps going for later writes.
+   * Runs one mutation at a time: applies it in memory, writes the result to
+   * disk, and restores the previous state if the write fails. Because
+   * mutations never overlap, a write only ever contains changes that have
+   * already succeeded plus its own, and a rollback restores the exact state
+   * (including task order) from before the mutation.
    */
-  persist() {
-    const write = this.writeQueue.then(() => this.writeFile());
-    this.writeQueue = write.catch(() => {});
-    return write;
+  mutate(apply) {
+    const result = this.writeQueue.then(async () => {
+      const snapshot = new Map(this.tasks);
+      const value = apply();
+      if (!value) return value; // nothing changed, e.g. unknown id
+      try {
+        await this.writeFile();
+      } catch (err) {
+        this.tasks = snapshot;
+        throw err;
+      }
+      return value;
+    });
+    this.writeQueue = result.catch(() => {});
+    return result;
   }
 
   /** Resolves once every queued write has settled. */
@@ -68,44 +81,19 @@ export class FileTaskStore extends TaskStore {
     }
   }
 
-  // Mutations resolve only once the change is on disk. If the write fails the
-  // in-memory change is rolled back (unless a later change already replaced
-  // it) and the error is rethrown, so callers never report a lost write as saved.
+  // Mutations resolve only once the change is on disk, and reject (with the
+  // in-memory change rolled back) if the write fails, so callers never report
+  // a lost write as saved.
 
-  async create(input) {
-    const task = super.create(input);
-    try {
-      await this.persist();
-    } catch (err) {
-      if (this.tasks.get(task.id) === task) this.tasks.delete(task.id);
-      throw err;
-    }
-    return task;
+  create(input) {
+    return this.mutate(() => super.create(input));
   }
 
-  async update(id, changes) {
-    const previous = this.tasks.get(id);
-    const task = super.update(id, changes);
-    if (!task) return task;
-    try {
-      await this.persist();
-    } catch (err) {
-      if (this.tasks.get(id) === task) this.tasks.set(id, previous);
-      throw err;
-    }
-    return task;
+  update(id, changes) {
+    return this.mutate(() => super.update(id, changes));
   }
 
-  async delete(id) {
-    const previous = this.tasks.get(id);
-    const deleted = super.delete(id);
-    if (!deleted) return deleted;
-    try {
-      await this.persist();
-    } catch (err) {
-      if (!this.tasks.has(id)) this.tasks.set(id, previous);
-      throw err;
-    }
-    return deleted;
+  delete(id) {
+    return this.mutate(() => super.delete(id));
   }
 }

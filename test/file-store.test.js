@@ -95,13 +95,53 @@ test('a failed rename leaves no temp file behind', async () => {
   assert.deepEqual((await fs.readdir(path.dirname(file))).sort(), ['tasks.json']);
 });
 
-test('shuts down cleanly on SIGTERM', async () => {
+test('a failed delete keeps the task in its original position', async () => {
+  const store = await FileTaskStore.open(file);
+  for (const title of ['A', 'B', 'C']) await store.create({ title });
+  const [, b] = store.list();
+  store.writeFile = async () => { throw new Error('disk full'); };
+  await assert.rejects(store.delete(b.id), /disk full/);
+  assert.deepEqual(store.list().map((t) => t.title), ['A', 'B', 'C']);
+});
+
+test('a change whose write fails is never saved by an earlier write', async () => {
+  const store = await FileTaskStore.open(file);
+  const realWrite = store.writeFile.bind(store);
+  let calls = 0;
+  store.writeFile = async () => {
+    if (++calls === 2) throw new Error('disk full');
+    return realWrite();
+  };
+  const first = store.create({ title: 'Saved' });
+  const second = store.create({ title: 'Rolled back' });
+  await first;
+  await assert.rejects(second, /disk full/);
+
+  const reopened = await FileTaskStore.open(file);
+  assert.deepEqual(reopened.list().map((t) => t.title), ['Saved']);
+});
+
+test('a task saved just before SIGTERM survives a restart', async () => {
   const child = spawn(process.execPath, ['src/index.js'], {
     env: { ...process.env, PORT: '0', DATA_FILE: file },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
-  await once(child.stdout, 'data');
-  child.kill('SIGTERM');
-  const [code] = await once(child, 'exit');
-  assert.equal(code, 0);
+  try {
+    const [line] = await once(child.stdout, 'data');
+    const port = String(line).match(/:(\d+) /)[1];
+    const res = await fetch(`http://127.0.0.1:${port}/tasks`, {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title: 'Before shutdown' }),
+    });
+    assert.equal(res.status, 201);
+    child.kill('SIGTERM');
+    const [code] = await once(child, 'exit');
+    assert.equal(code, 0);
+  } finally {
+    child.kill();
+  }
+
+  const reopened = await FileTaskStore.open(file);
+  assert.deepEqual(reopened.list().map((t) => t.title), ['Before shutdown']);
 });
