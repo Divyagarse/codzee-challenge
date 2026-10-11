@@ -1,6 +1,7 @@
 import { test, before, after } from 'node:test';
 import assert from 'node:assert/strict';
 import { startServer } from './helpers.js';
+import { parseListQuery, applyListQuery } from '../src/query.js';
 
 let app;
 before(async () => {
@@ -74,17 +75,16 @@ for (const param of ['limit=-1', 'offset=-1', 'limit=10abc', 'limit=1.5']) {
   });
 }
 
-test('search tolerates a null description', async () => {
-  const created = await app.request('POST', '/tasks', { title: 'No details', description: null });
-  const res = await app.request('GET', '/tasks?q=report');
-  assert.equal(res.status, 200);
-  assert.deepEqual(res.body.data.map((t) => t.title).sort(), ['Fix login bug', 'Write quarterly report']);
-  await app.request('DELETE', `/tasks/${created.body.data.id}`);
+// The API now rejects these values, but tasks can also come from an older data
+// file, so the query code must still cope with them.
+test('search tolerates a null title or description', () => {
+  const tasks = [{ title: null, description: null }, { title: 'Report', description: 'x' }];
+  const { data } = applyListQuery(tasks, parseListQuery(new URLSearchParams('q=report')));
+  assert.deepEqual(data.map((t) => t.title), ['Report']);
 });
 
-test('unknown priorities like "toString" sort first without scrambling the rest', async () => {
-  const created = await app.request('POST', '/tasks', { title: 'Odd', priority: 'toString' });
-  const res = await app.request('GET', '/tasks?sort=priority');
-  assert.deepEqual(res.body.data.map((t) => t.priority), ['toString', 'low', 'medium', 'high', 'high']);
-  await app.request('DELETE', `/tasks/${created.body.data.id}`);
+test('unknown priorities like "toString" sort first without scrambling the rest', () => {
+  const tasks = ['high', 'toString', 'low', 'medium'].map((priority) => ({ priority }));
+  const { data } = applyListQuery(tasks, parseListQuery(new URLSearchParams('sort=priority')));
+  assert.deepEqual(data.map((t) => t.priority), ['toString', 'low', 'medium', 'high']);
 });

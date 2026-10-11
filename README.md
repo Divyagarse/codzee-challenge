@@ -5,7 +5,7 @@ This repository is used to explore AI-assisted code review with [Codzee](https:/
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22+ (the test script relies on `node --test` glob support)
 
 ## Getting started
 
@@ -58,6 +58,14 @@ The response includes pagination metadata:
 { "data": [ ... ], "meta": { "total": 57, "limit": 20, "offset": 40 } }
 ```
 
+## Validation
+
+- `title` is required on create, must be a non-empty string (trimmed) of at most 200 characters.
+- `description` must be a string of at most 5000 characters.
+- `status` must be one of `todo`, `in_progress`, `done`; `priority` one of `low`, `medium`, `high`.
+- Unknown fields (including `id`, `createdAt`, `updatedAt`) are rejected with `400`.
+- Request bodies must be JSON (`415` otherwise) and at most 1 MiB (`413` otherwise).
+
 ## Project layout
 
 ```
@@ -67,6 +75,7 @@ src/
   http.js         # JSON helpers and HttpError
   store.js        # in-memory task store
   query.js        # list filtering, sorting and pagination
+  validation.js   # request payload validation
   routes/tasks.js # task endpoints
 test/             # node:test integration tests
 ```
