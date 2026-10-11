@@ -51,3 +51,33 @@ test('rejects unknown sort fields and non-numeric limits', async () => {
   assert.equal((await app.request('GET', '/tasks?sort=password')).status, 400);
   assert.equal((await app.request('GET', '/tasks?limit=abc')).status, 400);
 });
+
+test('sorts by priority rank, not alphabetically', async () => {
+  const asc = await app.request('GET', '/tasks?sort=priority');
+  assert.deepEqual(asc.body.data.map((t) => t.priority), ['low', 'medium', 'high', 'high']);
+  const desc = await app.request('GET', '/tasks?sort=-priority');
+  assert.deepEqual(desc.body.data.map((t) => t.priority), ['high', 'high', 'medium', 'low']);
+});
+
+test('sorts titles case-insensitively', async () => {
+  await app.request('POST', '/tasks', { title: 'apple pie' });
+  const res = await app.request('GET', '/tasks?sort=title&limit=2');
+  assert.deepEqual(res.body.data.map((t) => t.title), ['apple pie', 'Fix login bug']);
+  const created = (await app.request('GET', '/tasks?q=apple pie')).body.data[0];
+  await app.request('DELETE', `/tasks/${created.id}`);
+});
+
+for (const param of ['limit=-1', 'offset=-1', 'limit=10abc', 'limit=1.5']) {
+  test(`rejects ${param}`, async () => {
+    const res = await app.request('GET', `/tasks?${param}`);
+    assert.equal(res.status, 400);
+  });
+}
+
+test('search tolerates a null description', async () => {
+  const created = await app.request('POST', '/tasks', { title: 'No details', description: null });
+  const res = await app.request('GET', '/tasks?q=report');
+  assert.equal(res.status, 200);
+  assert.deepEqual(res.body.data.map((t) => t.title).sort(), ['Fix login bug', 'Write quarterly report']);
+  await app.request('DELETE', `/tasks/${created.body.data.id}`);
+});

@@ -2,15 +2,23 @@ import { HttpError } from './http.js';
 
 const SORTABLE_FIELDS = ['createdAt', 'updatedAt', 'title', 'priority'];
 const DEFAULT_LIMIT = 20;
+const PRIORITY_RANK = { low: 0, medium: 1, high: 2 };
 
 function parseIntParam(params, name, fallback) {
   const raw = params.get(name);
   if (raw === null) return fallback;
-  const value = Number.parseInt(raw, 10);
-  if (Number.isNaN(value)) {
-    throw new HttpError(400, `${name} must be an integer`);
+  if (!/^\d+$/.test(raw)) {
+    throw new HttpError(400, `${name} must be a non-negative integer`);
   }
-  return value;
+  return Number(raw);
+}
+
+function compareField(field, a, b) {
+  if (field === 'priority') return (PRIORITY_RANK[a] ?? -1) - (PRIORITY_RANK[b] ?? -1);
+  if (field === 'title') return String(a ?? '').localeCompare(String(b ?? ''), undefined, { sensitivity: 'base' });
+  if (a < b) return -1;
+  if (a > b) return 1;
+  return 0;
 }
 
 /**
@@ -44,17 +52,13 @@ export function applyListQuery(tasks, query) {
   if (query.q) {
     results = results.filter(
       (t) =>
-        t.title.toLowerCase().includes(query.q) ||
-        t.description.toLowerCase().includes(query.q)
+        String(t.title ?? '').toLowerCase().includes(query.q) ||
+        String(t.description ?? '').toLowerCase().includes(query.q)
     );
   }
 
   const { field, direction } = query.sort;
-  results = [...results].sort((a, b) => {
-    if (a[field] < b[field]) return -1 * direction;
-    if (a[field] > b[field]) return 1 * direction;
-    return 0;
-  });
+  results = [...results].sort((a, b) => compareField(field, a[field], b[field]) * direction);
 
   const total = results.length;
   const data = results.slice(query.offset, query.offset + query.limit);

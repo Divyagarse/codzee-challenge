@@ -48,7 +48,7 @@ A task has the shape:
 | `status`   | `todo`         | Only tasks with this status                              |
 | `priority` | `high`         | Only tasks with this priority                            |
 | `q`        | `report`       | Case-insensitive search in title and description         |
-| `sort`     | `-createdAt`   | `createdAt`, `updatedAt`, `title` or `priority`; prefix `-` for descending (default `-createdAt`) |
+| `sort`     | `-createdAt`   | `createdAt`, `updatedAt`, `title` (case-insensitive) or `priority` (low < medium < high); prefix `-` for descending (default `-createdAt`) |
 | `limit`    | `20`           | Page size (default 20)                                   |
 | `offset`   | `40`           | Number of tasks to skip (default 0)                      |
 
