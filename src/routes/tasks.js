@@ -1,4 +1,5 @@
 import { sendJson, readJson, HttpError } from '../http.js';
+import { validateCreate, validateUpdate } from '../validation.js';
 
 export function registerTaskRoutes(router, store) {
   router.get('/tasks', (req, res) => {
@@ -12,15 +13,16 @@ export function registerTaskRoutes(router, store) {
   });
 
   router.post('/tasks', async (req, res) => {
-    const body = await readJson(req);
-    if (!body.title) throw new HttpError(400, 'title is required');
-    const task = store.create(body);
+    const input = validateCreate(await readJson(req));
+    const task = store.create(input);
     sendJson(res, 201, { data: task });
   });
 
   router.patch('/tasks/:id', async (req, res) => {
-    const body = await readJson(req);
-    const task = store.update(req.params.id, body);
+    if (!store.get(req.params.id)) throw new HttpError(404, 'Task not found');
+    const changes = validateUpdate(await readJson(req));
+    // The task may have been deleted while the body was being read.
+    const task = store.update(req.params.id, changes);
     if (!task) throw new HttpError(404, 'Task not found');
     sendJson(res, 200, { data: task });
   });

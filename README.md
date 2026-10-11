@@ -39,6 +39,14 @@ A task has the shape:
 }
 ```
 
+## Validation
+
+- `title` is required on create, must be a non-empty string (trimmed) of at most 200 characters.
+- `description` must be a string of at most 5000 characters.
+- `status` must be one of `todo`, `in_progress`, `done`; `priority` one of `low`, `medium`, `high`.
+- Unknown fields (including `id`, `createdAt`, `updatedAt`) are rejected with `400`.
+- Request bodies must be JSON (`415` otherwise) and at most 1 MiB (`413` otherwise).
+
 ## Project layout
 
 ```
@@ -47,6 +55,7 @@ src/
   router.js       # minimal router with :param support
   http.js         # JSON helpers and HttpError
   store.js        # in-memory task store
+  validation.js   # request payload validation
   routes/tasks.js # task endpoints
 test/             # node:test integration tests
 ```
