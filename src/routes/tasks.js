@@ -16,7 +16,7 @@ export function registerTaskRoutes(router, store) {
 
   router.post('/tasks', async (req, res) => {
     const input = validateCreate(await readJson(req));
-    const task = store.create(input);
+    const task = await store.create(input);
     sendJson(res, 201, { data: task });
   });
 
@@ -24,13 +24,13 @@ export function registerTaskRoutes(router, store) {
     if (!store.get(req.params.id)) throw new HttpError(404, 'Task not found');
     const changes = validateUpdate(await readJson(req));
     // The task may have been deleted while the body was being read.
-    const task = store.update(req.params.id, changes);
+    const task = await store.update(req.params.id, changes);
     if (!task) throw new HttpError(404, 'Task not found');
     sendJson(res, 200, { data: task });
   });
 
-  router.delete('/tasks/:id', (req, res) => {
-    const deleted = store.delete(req.params.id);
+  router.delete('/tasks/:id', async (req, res) => {
+    const deleted = await store.delete(req.params.id);
     if (!deleted) throw new HttpError(404, 'Task not found');
     res.writeHead(204);
     res.end();

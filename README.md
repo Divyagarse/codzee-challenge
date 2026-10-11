@@ -14,6 +14,16 @@ npm start        # starts the server on http://localhost:3000 (override with POR
 npm test         # runs the test suite with node:test
 ```
 
+### Persistence
+
+By default tasks are kept in memory and lost on restart. Set `DATA_FILE` to persist them to a JSON file:
+
+```bash
+DATA_FILE=./data/tasks.json npm start
+```
+
+Writes are atomic: data is written to a temporary file, synced to disk and renamed into place. A request only succeeds once its change is on disk; if the write fails the change is rolled back and the request returns `500`. On `SIGTERM`/`SIGINT` the server finishes in-flight requests and pending writes before exiting.
+
 ## API
 
 | Method | Path          | Description        |
@@ -76,6 +86,7 @@ src/
   store.js        # in-memory task store
   query.js        # list filtering, sorting and pagination
   validation.js   # request payload validation
+  file-store.js   # JSON-file-backed task store (DATA_FILE)
   routes/tasks.js # task endpoints
 test/             # node:test integration tests
 ```
