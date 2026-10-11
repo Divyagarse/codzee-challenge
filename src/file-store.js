@@ -33,16 +33,17 @@ export class FileTaskStore extends TaskStore {
     }
   }
 
+  /**
+   * Queues a write of the current state. The returned promise rejects if
+   * that write fails; the queue itself keeps going for later writes.
+   */
   persist() {
-    this.writeQueue = this.writeQueue
-      .then(() => this.writeFile())
-      .catch((err) => {
-        console.error(`Failed to persist tasks to ${this.filePath}:`, err);
-      });
-    return this.writeQueue;
+    const write = this.writeQueue.then(() => this.writeFile());
+    this.writeQueue = write.catch(() => {});
+    return write;
   }
 
-  /** Resolves once every queued write has been flushed to disk. */
+  /** Resolves once every queued write has settled. */
   flush() {
     return this.writeQueue;
   }
@@ -50,25 +51,61 @@ export class FileTaskStore extends TaskStore {
   async writeFile() {
     const tmpPath = `${this.filePath}.${process.pid}.tmp`;
     await fs.mkdir(path.dirname(this.filePath), { recursive: true });
-    await fs.writeFile(tmpPath, JSON.stringify(this.list(), null, 2));
-    await fs.rename(tmpPath, this.filePath);
+    try {
+      const handle = await fs.open(tmpPath, 'w');
+      try {
+        await handle.writeFile(JSON.stringify(this.list(), null, 2));
+        // Flush to disk before the rename so a power loss can't leave the
+        // renamed file empty or truncated.
+        await handle.sync();
+      } finally {
+        await handle.close();
+      }
+      await fs.rename(tmpPath, this.filePath);
+    } catch (err) {
+      await fs.rm(tmpPath, { force: true });
+      throw err;
+    }
   }
 
-  create(input) {
+  // Mutations resolve only once the change is on disk. If the write fails the
+  // in-memory change is rolled back (unless a later change already replaced
+  // it) and the error is rethrown, so callers never report a lost write as saved.
+
+  async create(input) {
     const task = super.create(input);
-    this.persist();
+    try {
+      await this.persist();
+    } catch (err) {
+      if (this.tasks.get(task.id) === task) this.tasks.delete(task.id);
+      throw err;
+    }
     return task;
   }
 
-  update(id, changes) {
+  async update(id, changes) {
+    const previous = this.tasks.get(id);
     const task = super.update(id, changes);
-    if (task) this.persist();
+    if (!task) return task;
+    try {
+      await this.persist();
+    } catch (err) {
+      if (this.tasks.get(id) === task) this.tasks.set(id, previous);
+      throw err;
+    }
     return task;
   }
 
-  delete(id) {
+  async delete(id) {
+    const previous = this.tasks.get(id);
     const deleted = super.delete(id);
-    if (deleted) this.persist();
+    if (!deleted) return deleted;
+    try {
+      await this.persist();
+    } catch (err) {
+      if (!this.tasks.has(id)) this.tasks.set(id, previous);
+      throw err;
+    }
     return deleted;
   }
 }

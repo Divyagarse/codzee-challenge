@@ -22,7 +22,7 @@ By default tasks are kept in memory and lost on restart. Set `DATA_FILE` to pers
 DATA_FILE=./data/tasks.json npm start
 ```
 
-Writes are atomic: data is written to a temporary file and renamed into place.
+Writes are atomic: data is written to a temporary file, synced to disk and renamed into place. A request only succeeds once its change is on disk; if the write fails the change is rolled back and the request returns `500`. On `SIGTERM`/`SIGINT` the server finishes in-flight requests and pending writes before exiting.
 
 ## API
 
