@@ -1,8 +1,11 @@
 import { sendJson, readJson, HttpError } from '../http.js';
+import { parseListQuery, applyListQuery } from '../query.js';
+import { validateCreate, validateUpdate } from '../validation.js';
 
 export function registerTaskRoutes(router, store) {
   router.get('/tasks', (req, res) => {
-    sendJson(res, 200, { data: store.list() });
+    const query = parseListQuery(req.query);
+    sendJson(res, 200, applyListQuery(store.list(), query));
   });
 
   router.get('/tasks/:id', (req, res) => {
@@ -12,15 +15,16 @@ export function registerTaskRoutes(router, store) {
   });
 
   router.post('/tasks', async (req, res) => {
-    const body = await readJson(req);
-    if (!body.title) throw new HttpError(400, 'title is required');
-    const task = await store.create(body);
+    const input = validateCreate(await readJson(req));
+    const task = await store.create(input);
     sendJson(res, 201, { data: task });
   });
 
   router.patch('/tasks/:id', async (req, res) => {
-    const body = await readJson(req);
-    const task = await store.update(req.params.id, body);
+    if (!store.get(req.params.id)) throw new HttpError(404, 'Task not found');
+    const changes = validateUpdate(await readJson(req));
+    // The task may have been deleted while the body was being read.
+    const task = await store.update(req.params.id, changes);
     if (!task) throw new HttpError(404, 'Task not found');
     sendJson(res, 200, { data: task });
   });
