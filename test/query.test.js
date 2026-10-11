@@ -81,3 +81,10 @@ test('search tolerates a null description', async () => {
   assert.deepEqual(res.body.data.map((t) => t.title).sort(), ['Fix login bug', 'Write quarterly report']);
   await app.request('DELETE', `/tasks/${created.body.data.id}`);
 });
+
+test('unknown priorities like "toString" sort first without scrambling the rest', async () => {
+  const created = await app.request('POST', '/tasks', { title: 'Odd', priority: 'toString' });
+  const res = await app.request('GET', '/tasks?sort=priority');
+  assert.deepEqual(res.body.data.map((t) => t.priority), ['toString', 'low', 'medium', 'high', 'high']);
+  await app.request('DELETE', `/tasks/${created.body.data.id}`);
+});

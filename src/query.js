@@ -2,7 +2,7 @@ import { HttpError } from './http.js';
 
 const SORTABLE_FIELDS = ['createdAt', 'updatedAt', 'title', 'priority'];
 const DEFAULT_LIMIT = 20;
-const PRIORITY_RANK = { low: 0, medium: 1, high: 2 };
+const PRIORITY_RANK = new Map([['low', 0], ['medium', 1], ['high', 2]]);
 
 function parseIntParam(params, name, fallback) {
   const raw = params.get(name);
@@ -14,7 +14,7 @@ function parseIntParam(params, name, fallback) {
 }
 
 function compareField(field, a, b) {
-  if (field === 'priority') return (PRIORITY_RANK[a] ?? -1) - (PRIORITY_RANK[b] ?? -1);
+  if (field === 'priority') return (PRIORITY_RANK.get(a) ?? -1) - (PRIORITY_RANK.get(b) ?? -1);
   if (field === 'title') return String(a ?? '').localeCompare(String(b ?? ''), undefined, { sensitivity: 'base' });
   if (a < b) return -1;
   if (a > b) return 1;
