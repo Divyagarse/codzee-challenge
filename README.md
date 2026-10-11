@@ -39,6 +39,25 @@ A task has the shape:
 }
 ```
 
+## Listing tasks
+
+`GET /tasks` supports the following query parameters:
+
+| Parameter  | Example        | Description                                              |
+| ---------- | -------------- | -------------------------------------------------------- |
+| `status`   | `todo`         | Only tasks with this status                              |
+| `priority` | `high`         | Only tasks with this priority                            |
+| `q`        | `report`       | Case-insensitive search in title and description         |
+| `sort`     | `-createdAt`   | `createdAt`, `updatedAt`, `title` (case-insensitive) or `priority` (low < medium < high); prefix `-` for descending (default `-createdAt`) |
+| `limit`    | `20`           | Page size (default 20)                                   |
+| `offset`   | `40`           | Number of tasks to skip (default 0)                      |
+
+The response includes pagination metadata:
+
+```json
+{ "data": [ ... ], "meta": { "total": 57, "limit": 20, "offset": 40 } }
+```
+
 ## Validation
 
 - `title` is required on create, must be a non-empty string (trimmed) of at most 200 characters.
@@ -55,6 +74,7 @@ src/
   router.js       # minimal router with :param support
   http.js         # JSON helpers and HttpError
   store.js        # in-memory task store
+  query.js        # list filtering, sorting and pagination
   validation.js   # request payload validation
   routes/tasks.js # task endpoints
 test/             # node:test integration tests
