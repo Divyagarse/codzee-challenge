@@ -11,9 +11,23 @@ export function sendJson(res, status, body) {
   res.end(payload);
 }
 
-export async function readJson(req) {
+export const MAX_BODY_BYTES = 1024 * 1024;
+
+export async function readJson(req, { limit = MAX_BODY_BYTES } = {}) {
+  const contentType = req.headers['content-type'] ?? '';
+  if (req.headers['content-length'] !== '0' && contentType && !contentType.startsWith('application/json')) {
+    throw new HttpError(415, 'Content-Type must be application/json');
+  }
+
   const chunks = [];
-  for await (const chunk of req) chunks.push(chunk);
+  let size = 0;
+  for await (const chunk of req) {
+    size += chunk.length;
+    if (size > limit) {
+      throw new HttpError(413, `Request body exceeds ${limit} bytes`);
+    }
+    chunks.push(chunk);
+  }
   const raw = Buffer.concat(chunks).toString('utf8');
   if (!raw) return {};
   try {
