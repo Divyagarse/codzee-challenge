@@ -5,7 +5,7 @@ This repository is used to explore AI-assisted code review with [Codzee](https:/
 
 ## Requirements
 
-- Node.js 20+
+- Node.js 22+ (the test script relies on `node --test` glob support)
 
 ## Getting started
 
