@@ -4,6 +4,8 @@ import fs from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 import { spawn } from 'node:child_process';
+import http from 'node:http';
+import { setTimeout } from 'node:timers/promises';
 import { once } from 'node:events';
 import { FileTaskStore } from '../src/file-store.js';
 import { startServer } from './helpers.js';
@@ -121,21 +123,37 @@ test('a change whose write fails is never saved by an earlier write', async () =
   assert.deepEqual(reopened.list().map((t) => t.title), ['Saved']);
 });
 
-test('a task saved just before SIGTERM survives a restart', async () => {
+test('SIGTERM lets an in-flight write finish before exiting', async () => {
   const child = spawn(process.execPath, ['src/index.js'], {
     env: { ...process.env, PORT: '0', DATA_FILE: file },
     stdio: ['ignore', 'pipe', 'inherit'],
   });
   try {
     const [line] = await once(child.stdout, 'data');
-    const port = String(line).match(/:(\d+) /)[1];
-    const res = await fetch(`http://127.0.0.1:${port}/tasks`, {
+    const port = Number(String(line).match(/:(\d+) /)[1]);
+
+    // Send the headers and half the body, signal the server, then finish the
+    // body, so the request is still in flight when SIGTERM arrives.
+    const body = JSON.stringify({ title: 'In flight at shutdown' });
+    const req = http.request({
+      host: '127.0.0.1',
+      port,
       method: 'POST',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ title: 'Before shutdown' }),
+      path: '/tasks',
+      headers: { 'Content-Type': 'application/json', 'Content-Length': Buffer.byteLength(body) },
     });
-    assert.equal(res.status, 201);
+    const response = once(req, 'response');
+    req.write(body.slice(0, 10));
+    await once(req, 'socket').then(([socket]) => once(socket, 'connect'));
+    await setTimeout(200); // let the server accept the connection
+
     child.kill('SIGTERM');
+    await once(child.stdout, 'data'); // "SIGTERM received, shutting down"
+    req.end(body.slice(10));
+
+    const [res] = await response;
+    assert.equal(res.statusCode, 201);
+    res.resume();
     const [code] = await once(child, 'exit');
     assert.equal(code, 0);
   } finally {
@@ -143,5 +161,5 @@ test('a task saved just before SIGTERM survives a restart', async () => {
   }
 
   const reopened = await FileTaskStore.open(file);
-  assert.deepEqual(reopened.list().map((t) => t.title), ['Before shutdown']);
+  assert.deepEqual(reopened.list().map((t) => t.title), ['In flight at shutdown']);
 });

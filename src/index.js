@@ -14,8 +14,9 @@ server.listen(PORT, () => {
   console.log(`taskflow-api listening on http://localhost:${server.address().port} (${mode})`);
 });
 
-// On shutdown, stop accepting connections, let in-flight requests finish and
-// wait for queued writes to reach DATA_FILE before exiting.
+// On shutdown, stop accepting connections and let in-flight requests finish.
+// Mutating requests only respond once their write is on disk; the flush is a
+// safeguard for any write still queued after the last response.
 async function shutdown(signal) {
   console.log(`${signal} received, shutting down`);
   setTimeout(() => process.exit(1), 10_000).unref();
