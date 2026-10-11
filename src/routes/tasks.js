@@ -21,7 +21,9 @@ export function registerTaskRoutes(router, store) {
   router.patch('/tasks/:id', async (req, res) => {
     if (!store.get(req.params.id)) throw new HttpError(404, 'Task not found');
     const changes = validateUpdate(await readJson(req));
+    // The task may have been deleted while the body was being read.
     const task = store.update(req.params.id, changes);
+    if (!task) throw new HttpError(404, 'Task not found');
     sendJson(res, 200, { data: task });
   });
 

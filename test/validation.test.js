@@ -56,3 +56,20 @@ test('rejects bodies larger than 1 MiB', async () => {
   const res = await app.request('POST', '/tasks', { title: 'a', description: 'x'.repeat(1024 * 1024) });
   assert.equal(res.status, 413);
 });
+
+test('measures title length after trimming', async () => {
+  const task = await createTask({ title: 'x'.repeat(150) + ' '.repeat(100) });
+  assert.equal(task.title.length, 150);
+});
+
+test('rejects a body sent without a Content-Type', async () => {
+  // A Uint8Array body makes fetch send no Content-Type header at all.
+  const body = new TextEncoder().encode(JSON.stringify({ title: 'a' }));
+  const res = await app.request('POST', '/tasks', body, {});
+  assert.equal(res.status, 415);
+});
+
+test('accepts a Content-Type in any case', async () => {
+  const res = await app.request('POST', '/tasks', { title: 'a' }, { 'Content-Type': 'Application/JSON' });
+  assert.equal(res.status, 201);
+});

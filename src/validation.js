@@ -19,10 +19,11 @@ function validateField(field, value) {
       if (typeof value !== 'string' || value.trim() === '') {
         throw new HttpError(400, 'title must be a non-empty string');
       }
-      if (value.length > MAX_TITLE_LENGTH) {
+      const title = value.trim();
+      if (title.length > MAX_TITLE_LENGTH) {
         throw new HttpError(400, `title must be at most ${MAX_TITLE_LENGTH} characters`);
       }
-      return value.trim();
+      return title;
     }
     case 'description': {
       if (typeof value !== 'string') {

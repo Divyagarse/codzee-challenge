@@ -14,8 +14,10 @@ export function sendJson(res, status, body) {
 export const MAX_BODY_BYTES = 1024 * 1024;
 
 export async function readJson(req, { limit = MAX_BODY_BYTES } = {}) {
-  const contentType = req.headers['content-type'] ?? '';
-  if (req.headers['content-length'] !== '0' && contentType && !contentType.startsWith('application/json')) {
+  // Media types are case-insensitive (RFC 9110), so normalise before comparing.
+  const contentType = (req.headers['content-type'] ?? '').toLowerCase();
+  const isJson = contentType.startsWith('application/json');
+  if (req.headers['content-length'] !== '0' && contentType && !isJson) {
     throw new HttpError(415, 'Content-Type must be application/json');
   }
 
@@ -30,6 +32,7 @@ export async function readJson(req, { limit = MAX_BODY_BYTES } = {}) {
   }
   const raw = Buffer.concat(chunks).toString('utf8');
   if (!raw) return {};
+  if (!isJson) throw new HttpError(415, 'Content-Type must be application/json');
   try {
     return JSON.parse(raw);
   } catch {
