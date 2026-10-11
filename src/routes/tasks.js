@@ -1,8 +1,10 @@
 import { sendJson, readJson, HttpError } from '../http.js';
+import { parseListQuery, applyListQuery } from '../query.js';
 
 export function registerTaskRoutes(router, store) {
   router.get('/tasks', (req, res) => {
-    sendJson(res, 200, { data: store.list() });
+    const query = parseListQuery(req.query);
+    sendJson(res, 200, applyListQuery(store.list(), query));
   });
 
   router.get('/tasks/:id', (req, res) => {
